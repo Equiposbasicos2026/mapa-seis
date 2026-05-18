@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa Interactivo – Equipos Interculturales de Salud</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',Arial,sans-serif; }
+  body { display:flex; flex-direction:column; height:100vh; background:#0f172a; }
+
+  /* HEADER */
+  .header {
+    background:linear-gradient(135deg,#1F4E79,#2E75B6);
+    color:white; padding:10px 20px;
+    display:flex; align-items:center; justify-content:space-between;
+    box-shadow:0 2px 10px rgba(0,0,0,0.4); z-index:1000; flex-shrink:0;
+  }
+  .header-left { display:flex; align-items:center; gap:12px; }
+  .header-icon { font-size:28px; }
+  .header-title { font-size:15px; font-weight:700; letter-spacing:0.5px; }
+  .header-sub { font-size:11px; opacity:0.85; margin-top:2px; }
+  .header-badge {
+    background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
+    border-radius:20px; padding:4px 12px; font-size:11px; font-weight:600;
+  }
+
+  /* STATS BAR */
+  .stats-bar {
+    background:#1e293b; display:flex; gap:0; flex-shrink:0;
+    border-bottom:1px solid #334155;
+  }
+  .stat {
+    flex:1; padding:8px 16px; text-align:center;
+    border-right:1px solid #334155; cursor:pointer;
+    transition:background 0.2s;
+  }
+  .stat:last-child { border-right:none; }
+  .stat:hover { background:#2d3f55; }
+  .stat-num { font-size:20px; font-weight:800; color:#38bdf8; }
+  .stat-lbl { font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; margin-top:1px; }
+
+  /* MAIN */
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width:300px; background:#1e293b; display:flex; flex-direction:column;
+    border-right:1px solid #334155; flex-shrink:0; overflow:hidden;
+  }
+  .sidebar-header {
+    padding:12px 14px; background:#0f172a;
+    border-bottom:1px solid #334155;
+  }
+  .sidebar-title { color:#e2e8f0; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+  .search-box {
+    width:100%; padding:8px 12px; border-radius:8px;
+    background:#334155; border:1px solid #475569; color:#e2e8f0;
+    font-size:13px; outline:none;
+  }
+  .search-box::placeholder { color:#64748b; }
+  .search-box:focus { border-color:#38bdf8; }
+
+  /* FILTROS */
+  .filtros { padding:10px 14px; border-bottom:1px solid #334155; }
+  .filtro-title { color:#94a3b8; font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .filtro-btns { display:flex; flex-wrap:wrap; gap:4px; }
+  .filtro-btn {
+    padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600;
+    border:none; cursor:pointer; transition:all 0.2s; color:white;
+  }
+  .filtro-btn.active { opacity:1; transform:scale(1.05); }
+  .filtro-btn.inactive { opacity:0.45; }
+
+  /* LISTA */
+  .lista { flex:1; overflow-y:auto; padding:6px 0; }
+  .lista::-webkit-scrollbar { width:4px; }
+  .lista::-webkit-scrollbar-thumb { background:#334155; border-radius:2px; }
+
+  .item {
+    padding:10px 14px; cursor:pointer; border-left:3px solid transparent;
+    transition:all 0.15s; border-bottom:1px solid #1a2744;
+  }
+  .item:hover { background:#2d3f55; border-left-color:#38bdf8; }
+  .item.selected { background:#1d3a5e; border-left-color:#38bdf8; }
+  .item-name { color:#e2e8f0; font-size:13px; font-weight:600; }
+  .item-meta { color:#64748b; font-size:11px; margin-top:2px; }
+  .item-dot {
+    display:inline-block; width:8px; height:8px;
+    border-radius:50%; margin-right:6px; vertical-align:middle;
+  }
+
+  /* MAPA */
+  #map { flex:1; }
+
+  /* POPUP */
+  .popup-card { min-width:220px; }
+  .popup-nombre {
+    font-size:14px; font-weight:800; color:#1F4E79;
+    border-bottom:2px solid #2E75B6; padding-bottom:6px; margin-bottom:8px;
+  }
+  .popup-row { display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; }
+  .popup-label { color:#64748b; }
+  .popup-value { font-weight:700; color:#1e293b; }
+  .popup-lider { margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0; font-size:11px; color:#475569; }
+  .popup-badge {
+    display:inline-block; padding:2px 8px; border-radius:10px;
+    font-size:11px; font-weight:700; margin-top:6px;
+  }
+
+  /* LEYENDA */
+  .leyenda {
+    position:absolute; bottom:30px; right:10px; z-index:1000;
+    background:white; border-radius:10px; padding:12px 16px;
+    box-shadow:0 4px 15px rgba(0,0,0,0.2); min-width:180px;
+  }
+  .leyenda-title { font-size:11px; font-weight:800; color:#1F4E79; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+  .leyenda-item { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; color:#334155; }
+  .leyenda-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+
+  /* CONTADOR */
+  .counter {
+    padding:8px 14px; background:#0f172a; border-top:1px solid #334155;
+    color:#64748b; font-size:11px; text-align:center;
+  }
+  .counter span { color:#38bdf8; font-weight:700; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">🏥</div>
+    <div>
+      <div class="header-title">MAPA INTERACTIVO – EQUIPOS INTERCULTURALES DE SALUD</div>
+      <div class="header-sub">E.S.E. Hospital Nuestra Señora del Perpetuo Socorro de Uribia · La Guajira</div>
+    </div>
+  </div>
+  <div class="header-badge">📍 150 Comunidades</div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat" onclick="resetFiltros()">
+    <div class="stat-num">150</div>
+    <div class="stat-lbl">Comunidades</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">2,245</div>
+    <div class="stat-lbl">Familias</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">6,525</div>
+    <div class="stat-lbl">Personas</div>
+  </div>
+  <div class="stat" onclick="filtrarCategoria('Sin usuarios ESE')">
+    <div class="stat-num" style="color:#ef4444">23</div>
+    <div class="stat-lbl">Sin usuarios ESE</div>
+  </div>
+  <div class="stat" onclick="filtrarCategoria('')">
+    <div class="stat-num" style="color:#22c55e">127</div>
+    <div class="stat-lbl">Con usuarios ESE</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">🔍 Buscar comunidad</div>
+      <input class="search-box" type="text" id="busqueda" placeholder="Escriba el nombre..." oninput="filtrarLista()">
+    </div>
+    <div class="filtros">
+      <div class="filtro-title">Filtrar por usuarios ESE</div>
+      <div class="filtro-btns">
+        <button class="filtro-btn active" style="background:#6b7280" onclick="filtrarCategoria('todos')" id="btn-todos">Todos</button>
+        <button class="filtro-btn active" style="background:#6b7280" onclick="filtrarCategoria('Sin usuarios ESE')" id="btn-sin">Sin ESE</button>
+        <button class="filtro-btn active" style="background:#3b82f6" onclick="filtrarCategoria('1-5 usuarios')" id="btn-1">1–5</button>
+        <button class="filtro-btn active" style="background:#22c55e" onclick="filtrarCategoria('6-15 usuarios')" id="btn-6">6–15</button>
+        <button class="filtro-btn active" style="background:#f59e0b" onclick="filtrarCategoria('Más de 15 usuarios')" id="btn-15">+15</button>
+      </div>
+    </div>
+    <div class="lista" id="lista"></div>
+    <div class="counter">Mostrando <span id="contadorLista">0</span> comunidades</div>
+  </div>
+
+  <!-- MAPA -->
+  <div id="map"></div>
+</div>
+
+<!-- LEYENDA -->
+<div class="leyenda">
+  <div class="leyenda-title">Usuarios ESE</div>
+  <div class="leyenda-item"><div class="leyenda-dot" style="background:#6b7280"></div> Sin usuarios (0)</div>
+  <div class="leyenda-item"><div class="leyenda-dot" style="background:#3b82f6"></div> 1 – 5 usuarios</div>
+  <div class="leyenda-item"><div class="leyenda-dot" style="background:#22c55e"></div> 6 – 15 usuarios</div>
+  <div class="leyenda-item"><div class="leyenda-dot" style="background:#f59e0b"></div> Más de 15 usuarios</div>
+</div>
+
+<script>
+const COMUNIDADES = [{"nombre": "KALAIPANA", "lat": 12.156017, "lng": -71.704705, "familias": 3, "personas": 6, "usuarios_ese": 0, "lider": "GUILLERMINA URARIYU", "contacto": "3145735865", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "PANTERRAMANA", "lat": 12.098436, "lng": -71.836145, "familias": 21, "personas": 63, "usuarios_ese": 5, "lider": "YOSELIN IPUANA", "contacto": "3113691910", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "PETPANA", "lat": 12.070544, "lng": -71.820279, "familias": 25, "personas": 69, "usuarios_ese": 8, "lider": "MAGALIS IGUARAN", "contacto": "3144034149", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "FLOR DEL PARAISO", "lat": 12.09234, "lng": -71.715189, "familias": 2, "personas": 8, "usuarios_ese": 0, "lider": "LILIANA IPUANA", "contacto": "3215791057", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JOTOMANA", "lat": 12.096661, "lng": -71.719669, "familias": 18, "personas": 37, "usuarios_ese": 7, "lider": "LILIANA IPUANA", "contacto": "3215791057", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MAIKOU", "lat": 12.107187, "lng": -71.730743, "familias": 3, "personas": 13, "usuarios_ese": 0, "lider": "LILIANA IPUANA", "contacto": "3215791057", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "TRES BOCA", "lat": 12.122208, "lng": -71.711263, "familias": 38, "personas": 134, "usuarios_ese": 19, "lider": "GUILLERMINA URARIYU", "contacto": "3145735865", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "CHOTCHOPIAJAIN", "lat": 11.94358, "lng": -71.544017, "familias": 26, "personas": 67, "usuarios_ese": 15, "lider": "ALIDA", "contacto": "Sin información", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "FLOR DEL PARAISO", "lat": 11.809112, "lng": -71.616519, "familias": 12, "personas": 34, "usuarios_ese": 9, "lider": "JORGE BOTINY PAZ", "contacto": "3217275331", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ARRUANAPA", "lat": 11.82532, "lng": -71.674695, "familias": 68, "personas": 211, "usuarios_ese": 127, "lider": "YANETH MACHADO", "contacto": "3233090612", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "TALAJUTU", "lat": 11.847819, "lng": -71.661581, "familias": 25, "personas": 73, "usuarios_ese": 55, "lider": "ADOLFO URIANA", "contacto": "3104303410", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "JULATCHI", "lat": 11.851553, "lng": -71.691466, "familias": 15, "personas": 49, "usuarios_ese": 25, "lider": "CARMEN PRIETO", "contacto": "3233469007", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "IPASHI", "lat": 11.898974, "lng": -72.153636, "familias": 17, "personas": 59, "usuarios_ese": 10, "lider": "MARIANA PEREZ", "contacto": "3173164740", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "WAPAA", "lat": 11.691725, "lng": -71.966625, "familias": 13, "personas": 41, "usuarios_ese": 3, "lider": "ANA GONZALEZ", "contacto": "3107253691", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "KAWAMANA", "lat": 11.775278, "lng": -71.992831, "familias": 19, "personas": 54, "usuarios_ese": 2, "lider": "ELIECER JUSAYU", "contacto": "3205134241", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "YARALEN", "lat": 11.718803, "lng": -71.978767, "familias": 22, "personas": 58, "usuarios_ese": 7, "lider": "DORIS GUTIERREZ", "contacto": "3233346543", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "PAKIMANA", "lat": 11.770383, "lng": -72.019965, "familias": 21, "personas": 68, "usuarios_ese": 10, "lider": "TRINIDAD GONZALEZ", "contacto": "3206526783", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JIPAIN", "lat": 11.773987, "lng": -72.130574, "familias": 5, "personas": 20, "usuarios_ese": 5, "lider": "JOSE LEON GONZALEZ", "contacto": "3234504404", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "KOUWAMANA", "lat": 11.78898, "lng": -72.066788, "familias": 8, "personas": 24, "usuarios_ese": 0, "lider": "DILIA ROSA FERNANDEZ", "contacto": "3216341935", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "SHULUWOU", "lat": 11.781203, "lng": -72.098078, "familias": 2, "personas": 12, "usuarios_ese": 0, "lider": "IRIS TERESA GONZALEZ", "contacto": "3128340608", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "COUSHARARU", "lat": 12.123347, "lng": -71.966881, "familias": 10, "personas": 29, "usuarios_ese": 7, "lider": "MARIA MENGUAL", "contacto": "3147691097", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KULESIAMANA", "lat": 12.10978, "lng": -71.944994, "familias": 35, "personas": 94, "usuarios_ese": 1, "lider": "DAVID RODRIGUEZ", "contacto": "3116807362", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WARALIE", "lat": 12.029147, "lng": -71.84982, "familias": 7, "personas": 32, "usuarios_ese": 3, "lider": "MARIA MERCEDES IPUANA", "contacto": "3233427739", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "EL EDEN", "lat": 12.232367, "lng": -72.005911, "familias": 10, "personas": 17, "usuarios_ese": 5, "lider": "ESTEFANI SILVA", "contacto": "3145242047", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "SARUTSHIRA", "lat": 12.210607, "lng": -71.999411, "familias": 14, "personas": 38, "usuarios_ese": 9, "lider": "WILLINTON URIANA", "contacto": "3117839383", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "YUKUYOKOI", "lat": 12.245099, "lng": -71.997265, "familias": 14, "personas": 18, "usuarios_ese": 0, "lider": "PO URIANA", "contacto": "3117839383", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "MOOLU", "lat": 12.235408, "lng": -71.997117, "familias": 4, "personas": 19, "usuarios_ese": 0, "lider": "RAFAEL GONZALEZ", "contacto": "3235210228", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JOTOMANA", "lat": 12.219974, "lng": -72.067551, "familias": 4, "personas": 10, "usuarios_ese": 3, "lider": "JUANA URIANA", "contacto": "3206702525", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "SHITAIPA", "lat": 12.202887, "lng": -72.13758, "familias": 6, "personas": 28, "usuarios_ese": 5, "lider": "NORCA BERNIER", "contacto": "3117864532", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "CABO DE LA VELA", "lat": 12.192996, "lng": -72.146442, "familias": 43, "personas": 65, "usuarios_ese": 11, "lider": "Sin información", "contacto": "Sin información", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "UCHITU", "lat": 12.21547, "lng": -72.155345, "familias": 39, "personas": 69, "usuarios_ese": 30, "lider": "ALFREDO EPIEYU", "contacto": "3148963044", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PUJURU", "lat": 12.177408, "lng": -72.140456, "familias": 11, "personas": 33, "usuarios_ese": 8, "lider": "GAITAN GOMEZ", "contacto": "3148236875", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "CUBAMANA", "lat": 12.175716, "lng": -72.013669, "familias": 23, "personas": 68, "usuarios_ese": 25, "lider": "SILVIA URIANA", "contacto": "3148522298", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PALISHERU", "lat": 12.171196, "lng": -72.002141, "familias": 14, "personas": 37, "usuarios_ese": 2, "lider": "FRANCISCO URIANA", "contacto": "3108580348", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "SUHUNA", "lat": 12.167006, "lng": -71.998271, "familias": 9, "personas": 32, "usuarios_ese": 4, "lider": "JOSE LEON", "contacto": "3234183360", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "PALAMANA", "lat": 12.14561, "lng": -72.124826, "familias": 15, "personas": 34, "usuarios_ese": 2, "lider": "ANGEL VAQUERO", "contacto": "3013487246", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "ISHOTSHIMANA", "lat": 12.14561, "lng": -72.140476, "familias": 44, "personas": 78, "usuarios_ese": 36, "lider": "MARIA PONCE", "contacto": "3233834709", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "TEMECHON", "lat": 12.152779, "lng": -72.141472, "familias": 16, "personas": 33, "usuarios_ese": 10, "lider": "LAURA VELASQUEZ", "contacto": "3116864739", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KOUTSOSCHON", "lat": 12.157917, "lng": -72.14087, "familias": 6, "personas": 74, "usuarios_ese": 13, "lider": "GERARDO GOMEZ", "contacto": "3122479152", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "IPAISHI", "lat": 12.155532, "lng": -72.138009, "familias": 5, "personas": 18, "usuarios_ese": 5, "lider": "LAURA VELASQUEZ", "contacto": "3116864739", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "PALISERU", "lat": 12.131741, "lng": -72.102443, "familias": 26, "personas": 50, "usuarios_ese": 8, "lider": "MARCOS FERNANDEZ", "contacto": "3225248334", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "AREMA", "lat": 12.047992, "lng": -72.161579, "familias": 10, "personas": 32, "usuarios_ese": 9, "lider": "MARIA LUISA BARLIZA", "contacto": "3226068581", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ALEMA", "lat": 12.056528, "lng": -72.158796, "familias": 7, "personas": 31, "usuarios_ese": 10, "lider": "JOSE ARPUSHANA", "contacto": "3127566691", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "CARRIZAL PLAYA", "lat": 12.00453, "lng": -72.1814, "familias": 80, "personas": 228, "usuarios_ese": 110, "lider": "ESTHER IPUANA", "contacto": "3182498114", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "KALAUSIRRA", "lat": 12.055451, "lng": -72.107378, "familias": 3, "personas": 8, "usuarios_ese": 0, "lider": "JOSEFINA PUSHAINA", "contacto": "3107269059", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "SANTA LUCIA", "lat": 12.052118, "lng": -72.108671, "familias": 7, "personas": 14, "usuarios_ese": 0, "lider": "CARLOS IPUANA", "contacto": "3235602356", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "ALUYARU", "lat": 12.062041, "lng": -72.101575, "familias": 6, "personas": 10, "usuarios_ese": 4, "lider": "CARMEN VELASQUEZ", "contacto": "3145246910", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MARAJALU", "lat": 12.072044, "lng": -72.101583, "familias": 8, "personas": 8, "usuarios_ese": 3, "lider": "ISELA", "contacto": "3148128184", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "PUSHOULIA", "lat": 12.021443, "lng": -72.127846, "familias": 26, "personas": 78, "usuarios_ese": 20, "lider": "MILENA URIANA", "contacto": "3182389353", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PALEPALEN", "lat": 12.037475, "lng": -72.128334, "familias": 26, "personas": 73, "usuarios_ese": 26, "lider": "JHOAN HENRIQUEZ", "contacto": "3234615612", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "WAYUTPA", "lat": 12.039766, "lng": -72.134892, "familias": 8, "personas": 24, "usuarios_ese": 2, "lider": "JESUS PUSHAINA", "contacto": "3007788305", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WAYUIPA", "lat": 12.033193, "lng": -72.138971, "familias": 5, "personas": 16, "usuarios_ese": 1, "lider": "MARIELA PUSHAINA", "contacto": "3225417334", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WALETSIRRA", "lat": 12.032929, "lng": -72.123697, "familias": 7, "personas": 20, "usuarios_ese": 0, "lider": "ISABEL IPUANA", "contacto": "3225386816", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JARAURI", "lat": 12.028143, "lng": -72.122119, "familias": 5, "personas": 10, "usuarios_ese": 0, "lider": "UNEL IPUANA", "contacto": "3234615612", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JAPURARAO", "lat": 11.990312, "lng": -72.144212, "familias": 10, "personas": 26, "usuarios_ese": 8, "lider": "MATILDE GUTIERREZ", "contacto": "3185263979", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JAIPALECHI", "lat": 12.01297, "lng": -72.142195, "familias": 19, "personas": 47, "usuarios_ese": 5, "lider": "ICELA GAMEZ", "contacto": "3164579839", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MANUYALUU", "lat": 11.980766, "lng": -72.147128, "familias": 36, "personas": 104, "usuarios_ese": 22, "lider": "JOSEFA GARCIA", "contacto": "3175357195", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "LA TRAMPA", "lat": 11.998932, "lng": -72.15646, "familias": 8, "personas": 32, "usuarios_ese": 2, "lider": "MATILDE GUTIERREZ", "contacto": "3185263979", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "TESHIMANA", "lat": 12.005441, "lng": -72.135424, "familias": 7, "personas": 22, "usuarios_ese": 10, "lider": "CLEMENTE PUSHAINA", "contacto": "3150931415", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MUJUTKIO", "lat": 12.007622, "lng": -72.133171, "familias": 11, "personas": 29, "usuarios_ese": 10, "lider": "RAMON PANA", "contacto": "3177646480", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "CARRIZAL VIA", "lat": 11.98894, "lng": -72.143289, "familias": 13, "personas": 37, "usuarios_ese": 13, "lider": "OLGA PANA", "contacto": "3207107125", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ATUNCAMANA", "lat": 11.976615, "lng": -72.159855, "familias": 8, "personas": 29, "usuarios_ese": 10, "lider": "RAFAEL IPUANA", "contacto": "3182966753", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KALERRUWOU", "lat": 12.106474, "lng": -71.970208, "familias": 41, "personas": 122, "usuarios_ese": 7, "lider": "MIREYA BARROS", "contacto": "3135729960", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JIWALAIN", "lat": 12.031773, "lng": -72.003885, "familias": 17, "personas": 59, "usuarios_ese": 9, "lider": "AUXILIAN IPUANA", "contacto": "3137147299", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ULUIMANA", "lat": 11.945472, "lng": -71.934321, "familias": 10, "personas": 21, "usuarios_ese": 8, "lider": "ANA CLETA PUSHAINA", "contacto": "3128519235", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MANNAPANA", "lat": 11.936225, "lng": -71.905678, "familias": 10, "personas": 40, "usuarios_ese": 4, "lider": "ALBERTO IPUANA", "contacto": "3206800496", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "APAÑAPA", "lat": 11.923291, "lng": -71.938206, "familias": 25, "personas": 103, "usuarios_ese": 6, "lider": "FERNANDO IPUANA", "contacto": "3136736515", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "TROPICO", "lat": 11.988624, "lng": -72.112847, "familias": 9, "personas": 22, "usuarios_ese": 0, "lider": "NORELIS IPUANA", "contacto": "3156054634", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "KAUSUSHON", "lat": 11.935119, "lng": -72.111403, "familias": 14, "personas": 40, "usuarios_ese": 4, "lider": "ERICK MEDERO", "contacto": "3126773932", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MOSHOJOMANA", "lat": 11.950931, "lng": -72.141087, "familias": 12, "personas": 32, "usuarios_ese": 4, "lider": "EFRAIN IPUANA", "contacto": "3173481756", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "ATURRULEPU", "lat": 11.938072, "lng": -72.156048, "familias": 23, "personas": 58, "usuarios_ese": 14, "lider": "HILDA URIANA", "contacto": "3113280166", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MARTINMANA", "lat": 11.93414, "lng": -72.212974, "familias": 1, "personas": 2, "usuarios_ese": 0, "lider": "LAUDELINA MEDERO", "contacto": "3155455180", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "YOSUIPACHON", "lat": 11.940276, "lng": -72.210355, "familias": 4, "personas": 16, "usuarios_ese": 7, "lider": "JORGE MEDERO", "contacto": "3184561244", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KAUREN", "lat": 11.942189, "lng": -72.166048, "familias": 7, "personas": 25, "usuarios_ese": 8, "lider": "EUCLIDEZ PADILLA", "contacto": "3173997148", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "PARROUJAMANA", "lat": 11.956197, "lng": -72.158761, "familias": 17, "personas": 47, "usuarios_ese": 7, "lider": "JUAN JUSAYU", "contacto": "3159595566", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "TAPLAMANA", "lat": 11.951575, "lng": -72.164962, "familias": 10, "personas": 28, "usuarios_ese": 4, "lider": "MILENA PUSHAINA", "contacto": "3174137951", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MARTINMANA", "lat": 11.922228, "lng": -72.196943, "familias": 3, "personas": 10, "usuarios_ese": 0, "lider": "LAUDELINA MEDERO", "contacto": "3155455180", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "PANSALI", "lat": 11.922072, "lng": -72.195672, "familias": 11, "personas": 32, "usuarios_ese": 3, "lider": "JESUS URIANA", "contacto": "3160796703", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "JAMULLAMANA", "lat": 11.926876, "lng": -72.192354, "familias": 12, "personas": 35, "usuarios_ese": 2, "lider": "MANUEL URIANA", "contacto": "3206694189", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "YOURE", "lat": 11.92149, "lng": -72.191114, "familias": 10, "personas": 27, "usuarios_ese": 5, "lider": "TRINA ROSA IPUANA", "contacto": "3127943614", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "YOUREN", "lat": 11.9155, "lng": -72.178925, "familias": 12, "personas": 34, "usuarios_ese": 10, "lider": "MARYORI PIMIENTA", "contacto": "3126861976", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "OUKULE", "lat": 11.920789, "lng": -72.18451, "familias": 21, "personas": 55, "usuarios_ese": 11, "lider": "MANUEL CONSTAN", "contacto": "Sin información", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "WARISHITOU", "lat": 11.916644, "lng": -72.189748, "familias": 5, "personas": 20, "usuarios_ese": 0, "lider": "YIRA GUTIERREZ", "contacto": "3013453734", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JEYUCHON", "lat": 11.916594, "lng": -72.189763, "familias": 5, "personas": 14, "usuarios_ese": 4, "lider": "YAN CARLOS URIANA", "contacto": "3127849438", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WALIAPAALA", "lat": 11.926477, "lng": -72.177133, "familias": 5, "personas": 13, "usuarios_ese": 3, "lider": "JORGE PANA", "contacto": "3003311361", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MARTINMANA 2", "lat": 11.921107, "lng": -72.197818, "familias": 4, "personas": 9, "usuarios_ese": 2, "lider": "LAUDELINA MEDERO", "contacto": "3155455180", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MARAÑAMANA", "lat": 11.897072, "lng": -72.194545, "familias": 19, "personas": 57, "usuarios_ese": 9, "lider": "FELIPE ANTONIO PANA", "contacto": "3173988461", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "COUSHIMANA", "lat": 11.903299, "lng": -72.196441, "familias": 9, "personas": 24, "usuarios_ese": 3, "lider": "MILEIDIS URIANA", "contacto": "3167460042", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "CABILDOS DE CARDON", "lat": 11.916304, "lng": -72.200498, "familias": 7, "personas": 17, "usuarios_ese": 4, "lider": "YIRA GUTIERREZ", "contacto": "3013453734", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "KASUMANA", "lat": 11.861391, "lng": -72.240112, "familias": 9, "personas": 28, "usuarios_ese": 7, "lider": "NIRIO PUSHAINA", "contacto": "3145656812", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "TOLEMA", "lat": 11.883978, "lng": -72.25346, "familias": 5, "personas": 17, "usuarios_ese": 1, "lider": "ANTONIO URARIYU", "contacto": "3113862903", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "MASEN 2", "lat": 11.868505, "lng": -72.240152, "familias": 18, "personas": 63, "usuarios_ese": 12, "lider": "JESUS URARIYU", "contacto": "3186172186", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "YULUMANI", "lat": 11.864459, "lng": -72.24514, "familias": 22, "personas": 67, "usuarios_ese": 1, "lider": "NORA VANEGAS", "contacto": "3205868323", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "APULUWOU", "lat": 11.877519, "lng": -72.197484, "familias": 4, "personas": 10, "usuarios_ese": 1, "lider": "JESSICA PALMAR", "contacto": "3003291599", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "JURUOLAWAIN", "lat": 11.865055, "lng": -72.204214, "familias": 12, "personas": 36, "usuarios_ese": 11, "lider": "PADRITO PAZ", "contacto": "3028450799", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "LULUWAWAY", "lat": 11.871086, "lng": -72.201071, "familias": 5, "personas": 16, "usuarios_ese": 8, "lider": "EVELINA GONZALEZ", "contacto": "3105225299", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "PARRIRRUMANA", "lat": 11.880742, "lng": -72.2084, "familias": 18, "personas": 59, "usuarios_ese": 12, "lider": "ESTEBAN GOMEZ", "contacto": "3184695302", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "SHARA PAPSUAIPA", "lat": 11.887255, "lng": -72.194735, "familias": 13, "personas": 35, "usuarios_ese": 5, "lider": "EMILSA EPINAYU", "contacto": "3146605874", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "ALAPALEN", "lat": 11.870734, "lng": -72.203315, "familias": 6, "personas": 22, "usuarios_ese": 7, "lider": "ALBERTO GONZALEZ", "contacto": "3205411734", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "COJUNCITO", "lat": 11.86167, "lng": -72.206305, "familias": 19, "personas": 73, "usuarios_ese": 7, "lider": "CARMELITA JUSAYU", "contacto": "3235783947", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ORROCHON", "lat": 11.549625, "lng": -72.167959, "familias": 35, "personas": 72, "usuarios_ese": 10, "lider": "JUAN GONZALEZ", "contacto": "3122484387", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KAPUSHIRAIN", "lat": 11.539027, "lng": -72.173417, "familias": 17, "personas": 45, "usuarios_ese": 4, "lider": "GERMAN IPUANA", "contacto": "3218120293", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "SUKULUWOU", "lat": 11.557736, "lng": -72.15303, "familias": 31, "personas": 75, "usuarios_ese": 8, "lider": "PILAR BARROS", "contacto": "3173809595", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "TEWOU", "lat": 11.615228, "lng": -72.146141, "familias": 21, "personas": 52, "usuarios_ese": 1, "lider": "MARIA URSULA GONZALEZ", "contacto": "3106713716", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "JAIGUAMANA", "lat": 11.748075, "lng": -72.059146, "familias": 21, "personas": 68, "usuarios_ese": 11, "lider": "ADELA IPUANA", "contacto": "3225158908", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MANTAPA", "lat": 11.643188, "lng": -72.160445, "familias": 5, "personas": 24, "usuarios_ese": 1, "lider": "FERNANDO JAYARIYU", "contacto": "3216459491", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "JAWOU", "lat": 11.638459, "lng": -72.164896, "familias": 6, "personas": 29, "usuarios_ese": 0, "lider": "JOSE LEON JUSAYU", "contacto": "321369536", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "POPOSHIMANA", "lat": 11.781145, "lng": -72.192677, "familias": 17, "personas": 68, "usuarios_ese": 6, "lider": "MAMI GOURIYU", "contacto": "3116318740", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KUIZALU", "lat": 11.717617, "lng": -72.140341, "familias": 22, "personas": 64, "usuarios_ese": 0, "lider": "EDINSON GONZALEZ", "contacto": "3235008776", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "OLOPA", "lat": 11.670311, "lng": -72.21532, "familias": 13, "personas": 36, "usuarios_ese": 4, "lider": "VICENTE GARCIA", "contacto": "3207400410", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "JEMECHI", "lat": 11.646258, "lng": -72.180012, "familias": 15, "personas": 62, "usuarios_ese": 0, "lider": "DORIS IPUANA", "contacto": "32365147548", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "MASAMANA", "lat": 11.667673, "lng": -72.1669798, "familias": 17, "personas": 46, "usuarios_ese": 4, "lider": "FERNANDO GONZALEZ", "contacto": "3127793810", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "POTCHO", "lat": 11.655203, "lng": -72.178128, "familias": 11, "personas": 45, "usuarios_ese": 0, "lider": "JORGE JUSAYU", "contacto": "3106066142", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "MEDIA LUNA JAWOU", "lat": 11.68577, "lng": -72.223598, "familias": 9, "personas": 34, "usuarios_ese": 7, "lider": "NORBELIS IPUANA", "contacto": "3046664344", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MANNACHON", "lat": 11.682492, "lng": -72.244272, "familias": 10, "personas": 34, "usuarios_ese": 18, "lider": "CLAUDIO FERNANDEZ", "contacto": "3137058502", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PALISHITEMANA", "lat": 11.691651, "lng": -72.265222, "familias": 21, "personas": 62, "usuarios_ese": 3, "lider": "LEONARDO JUSAYU", "contacto": "3023438227", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "NUMAIN MALEIWA", "lat": 11.730885, "lng": -72.244497, "familias": 11, "personas": 23, "usuarios_ese": 4, "lider": "PETRONILA SOFIA", "contacto": "3223607064", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "YOTOJOROIN", "lat": 11.81857, "lng": -72.205571, "familias": 43, "personas": 108, "usuarios_ese": 16, "lider": "ROSA MARTINEZ", "contacto": "3145912775", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PASANAINCHON", "lat": 11.793339, "lng": -72.302992, "familias": 15, "personas": 47, "usuarios_ese": 17, "lider": "GUILLERMO PUSHAINA", "contacto": "3126350523", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "OROCHON", "lat": 11.810915, "lng": -72.19554, "familias": 9, "personas": 22, "usuarios_ese": 0, "lider": "OMAR GONZALEZ", "contacto": "3206822782", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "APUA", "lat": 11.806425, "lng": -72.234164, "familias": 16, "personas": 56, "usuarios_ese": 21, "lider": "FRANCISCO EPIEYU", "contacto": "3117308007", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "ALESAPAIN", "lat": 11.8318, "lng": -72.220727, "familias": 26, "personas": 77, "usuarios_ese": 11, "lider": "EDGARA GARCIA", "contacto": "3108606637", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JEYUPULE", "lat": 11.844614, "lng": -72.228404, "familias": 6, "personas": 16, "usuarios_ese": 0, "lider": "CAMILO URARIYU", "contacto": "3235167029", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "ANALAIPA", "lat": 11.842053, "lng": -72.215836, "familias": 8, "personas": 22, "usuarios_ese": 0, "lider": "FLORINDA URIANA", "contacto": "3186674200", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}, {"nombre": "JUYANASPA", "lat": 11.838132, "lng": -72.272821, "familias": 8, "personas": 25, "usuarios_ese": 3, "lider": "JONATHAN VANGRIEKEN", "contacto": "3170695582", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "POPORTIN", "lat": 11.843545, "lng": -72.320975, "familias": 13, "personas": 33, "usuarios_ese": 15, "lider": "RAFAEL EPIEYU", "contacto": "3217675144", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "FLOR DEL CAMPO", "lat": 11.824818, "lng": -72.309464, "familias": 2, "personas": 8, "usuarios_ese": 4, "lider": "RAFAEL EPIEYU", "contacto": "3217675144", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "PALAICAO", "lat": 11.848796, "lng": -72.306211, "familias": 8, "personas": 24, "usuarios_ese": 2, "lider": "ANICIA FINCE", "contacto": "3015759024", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "SHURRITCHON", "lat": 11.822598, "lng": -72.294093, "familias": 35, "personas": 108, "usuarios_ese": 33, "lider": "ROSENDO PALMAR", "contacto": "3045278522", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "PAMARRAKA", "lat": 11.852536, "lng": -72.297626, "familias": 5, "personas": 14, "usuarios_ese": 5, "lider": "MAZON PUSHAINA", "contacto": "3019098260", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WAJALECHON", "lat": 11.831575, "lng": -72.310097, "familias": 10, "personas": 31, "usuarios_ese": 6, "lider": "MARTIN PUSHAINA", "contacto": "3225308989", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "AUYAMA", "lat": 11.816895, "lng": -72.308941, "familias": 9, "personas": 39, "usuarios_ese": 5, "lider": "SHIRLEY IGUARAN", "contacto": "3216031612", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "BOTONCHON", "lat": 11.795125, "lng": -72.303079, "familias": 9, "personas": 22, "usuarios_ese": 3, "lider": "ARSENIO PUSHAINA", "contacto": "3217579750", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "KASIPACHI 2", "lat": 11.816895, "lng": -72.308941, "familias": 31, "personas": 83, "usuarios_ese": 18, "lider": "DORIS GONZALEZ", "contacto": "3205709522", "equipo": "Sin asignar", "categoria": "Más de 15 usuarios"}, {"nombre": "KATATULEMANA", "lat": 11.830465, "lng": -72.327883, "familias": 6, "personas": 19, "usuarios_ese": 6, "lider": "YELITZA URIANA", "contacto": "3209638450", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "SILLAMANA", "lat": 11.79713, "lng": -72.307846, "familias": 5, "personas": 16, "usuarios_ese": 7, "lider": "ABIGAIL MONTIEL", "contacto": "3046611123", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "SHIRUREMA", "lat": 11.795983, "lng": -72.330356, "familias": 17, "personas": 57, "usuarios_ese": 8, "lider": "OLIVIA HENRIQUE", "contacto": "3234576821", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JAMPUSUMANA", "lat": 11.813806, "lng": -72.280734, "familias": 13, "personas": 40, "usuarios_ese": 11, "lider": "EDUARDO HENRIQUEZ", "contacto": "3148753724", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "KAIGUARAIMANA", "lat": 11.82672, "lng": -72.305236, "familias": 21, "personas": 61, "usuarios_ese": 7, "lider": "REGINA PUSHAINA", "contacto": "3207735518", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "SALOUS", "lat": 11.781046, "lng": -72.2466, "familias": 14, "personas": 38, "usuarios_ese": 8, "lider": "DELIA ESTRADA", "contacto": "3205247697", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "IRRAMASEN", "lat": 11.56461, "lng": -72.98412, "familias": 24, "personas": 87, "usuarios_ese": 12, "lider": "CRISPIN IPUANA", "contacto": "3205832968", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "AMUCHEN", "lat": 11.71984, "lng": -72.287562, "familias": 9, "personas": 22, "usuarios_ese": 9, "lider": "YENIFER COTES", "contacto": "3126050281", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "MULAMANA", "lat": 11.71989, "lng": -72.312509, "familias": 18, "personas": 58, "usuarios_ese": 6, "lider": "ESTEBAN COTES", "contacto": "3207288085", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "YURRUTPANA", "lat": 11.789907, "lng": -72.284517, "familias": 19, "personas": 43, "usuarios_ese": 13, "lider": "JUAN CASTILLO", "contacto": "3103041486", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "JEPIROL", "lat": 11.77554, "lng": -72.281028, "familias": 11, "personas": 34, "usuarios_ese": 7, "lider": "MIGUEL PINO", "contacto": "3176404470", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "SAWASHIMANA", "lat": 11.784577, "lng": -72.25661, "familias": 20, "personas": 56, "usuarios_ese": 6, "lider": "JAIRO GONZALEZ", "contacto": "3205122879", "equipo": "Sin asignar", "categoria": "6-15 usuarios"}, {"nombre": "ATUNALIPA", "lat": 11.741982, "lng": -72.265228, "familias": 13, "personas": 39, "usuarios_ese": 5, "lider": "MARIA INES ARPUSHANA", "contacto": "3216883778", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "WASURCHI", "lat": 11.712614, "lng": -72.32318, "familias": 14, "personas": 49, "usuarios_ese": 4, "lider": "JOSE ANGEL JUSAYU", "contacto": "3170834356", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "HICHON", "lat": 11.718411, "lng": -72.332626, "familias": 18, "personas": 69, "usuarios_ese": 2, "lider": "REMEDIOS LUBO", "contacto": "3003548886", "equipo": "Sin asignar", "categoria": "1-5 usuarios"}, {"nombre": "LOS OLIVOS", "lat": 11.692063, "lng": -72.338165, "familias": 6, "personas": 21, "usuarios_ese": 0, "lider": "SOCORRO ARPUSHANA", "contacto": "3225249717", "equipo": "Sin asignar", "categoria": "Sin usuarios ESE"}];
+
+const COLORES = {
+  'Sin usuarios ESE': '#6b7280',
+  '1-5 usuarios':     '#3b82f6',
+  '6-15 usuarios':    '#22c55e',
+  'Más de 15 usuarios': '#f59e0b',
+};
+
+const COLORES_POPUP = {
+  'Sin usuarios ESE': '#6b7280',
+  '1-5 usuarios':     '#3b82f6',
+  '6-15 usuarios':    '#22c55e',
+  'Más de 15 usuarios': '#f59e0b',
+};
+
+// MAPA
+const map = L.map('map', {
+  center: [11.911, -72.134],
+  zoom: 10,
+  zoomControl: true,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap',
+  maxZoom: 18,
+}).addTo(map);
+
+// También capa satelital opcional
+const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '© Esri',
+  maxZoom: 18,
+});
+
+L.control.layers({'Mapa': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}),'Satélite': satelite}).addTo(map);
+
+// MARCADORES
+let markers = {};
+let mapaFiltroActual = 'todos';
+let selectedItem = null;
+
+function crearIcono(categoria, grande) {
+  const color = COLORES[categoria] || '#6b7280';
+  const size = grande ? 16 : 12;
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${size}px; height:${size}px;
+      background:${color};
+      border:2px solid white;
+      border-radius:50%;
+      box-shadow:0 2px 6px rgba(0,0,0,0.4);
+      transition:all 0.2s;
+    "></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
+  });
+}
+
+COMUNIDADES.forEach((c, idx) => {
+  const marker = L.marker([c.lat, c.lng], {icon: crearIcono(c.categoria, false)});
+
+  const popupContent = `
+    <div class="popup-card">
+      <div class="popup-nombre">📍 ${c.nombre}</div>
+      <div class="popup-row">
+        <span class="popup-label">Familias</span>
+        <span class="popup-value">🏠 ${c.familias}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">Personas</span>
+        <span class="popup-value">👥 ${c.personas}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">Usuarios ESE</span>
+        <span class="popup-value">🏥 ${c.usuarios_ese}</span>
+      </div>
+      <div class="popup-lider">
+        <strong>👤 Líder/Autoridad:</strong> ${c.lider}<br>
+        <strong>📞 Contacto:</strong> ${c.contacto}
+      </div>
+      <div>
+        <span class="popup-badge" style="background:${COLORES[c.categoria]}20;color:${COLORES[c.categoria]};border:1px solid ${COLORES[c.categoria]}">
+          ${c.categoria}
+        </span>
+      </div>
+    </div>`;
+
+  marker.bindPopup(popupContent, {maxWidth: 260});
+  marker.addTo(map);
+  markers[idx] = marker;
+
+  marker.on('click', () => seleccionarItem(idx));
+});
+
+// LISTA SIDEBAR
+function renderLista(filtradas) {
+  const lista = document.getElementById('lista');
+  lista.innerHTML = '';
+  filtradas.forEach(idx => {
+    const c = COMUNIDADES[idx];
+    const color = COLORES[c.categoria];
+    const div = document.createElement('div');
+    div.className = 'item' + (selectedItem === idx ? ' selected' : '');
+    div.id = `item-${idx}`;
+    div.innerHTML = `
+      <div class="item-name">
+        <span class="item-dot" style="background:${color}"></span>
+        ${c.nombre}
+      </div>
+      <div class="item-meta">🏠 ${c.familias} familias · 👥 ${c.personas} personas · 🏥 ${c.usuarios_ese} ESE</div>`;
+    div.onclick = () => seleccionarItem(idx);
+    lista.appendChild(div);
+  });
+  document.getElementById('contadorLista').textContent = filtradas.length;
+}
+
+function seleccionarItem(idx) {
+  // Quitar selección anterior
+  if (selectedItem !== null) {
+    const prevEl = document.getElementById(`item-${selectedItem}`);
+    if (prevEl) prevEl.classList.remove('selected');
+    markers[selectedItem].setIcon(crearIcono(COMUNIDADES[selectedItem].categoria, false));
+  }
+  selectedItem = idx;
+  const el = document.getElementById(`item-${idx}`);
+  if (el) { el.classList.add('selected'); el.scrollIntoView({block:'nearest'}); }
+  markers[idx].setIcon(crearIcono(COMUNIDADES[idx].categoria, true));
+  map.setView([COMUNIDADES[idx].lat, COMUNIDADES[idx].lng], 14, {animate:true});
+  markers[idx].openPopup();
+}
+
+function getIndicesFiltrados() {
+  const busq = document.getElementById('busqueda').value.toLowerCase().trim();
+  return COMUNIDADES.map((_,i)=>i).filter(i => {
+    const c = COMUNIDADES[i];
+    const matchNombre = c.nombre.toLowerCase().includes(busq);
+    const matchCat = mapaFiltroActual === 'todos' || c.categoria === mapaFiltroActual ||
+                     (mapaFiltroActual === '' && c.categoria !== 'Sin usuarios ESE');
+    return matchNombre && matchCat;
+  });
+}
+
+function filtrarLista() {
+  const indices = getIndicesFiltrados();
+  renderLista(indices);
+  // Mostrar/ocultar marcadores
+  COMUNIDADES.forEach((_,i) => {
+    if (indices.includes(i)) map.addLayer(markers[i]);
+    else map.removeLayer(markers[i]);
+  });
+}
+
+function filtrarCategoria(cat) {
+  mapaFiltroActual = cat;
+  // Actualizar botones
+  ['todos','sin','1','6','15'].forEach(b => {
+    const btn = document.getElementById(`btn-${b}`);
+    if (btn) btn.className = 'filtro-btn inactive';
+  });
+  const mapa = {'todos':'btn-todos','Sin usuarios ESE':'btn-sin','1-5 usuarios':'btn-1','6-15 usuarios':'btn-6','Más de 15 usuarios':'btn-15','':'btn-todos'};
+  const activo = mapa[cat] || 'btn-todos';
+  const btn = document.getElementById(activo);
+  if (btn) btn.className = 'filtro-btn active';
+  filtrarLista();
+}
+
+function resetFiltros() {
+  document.getElementById('busqueda').value = '';
+  filtrarCategoria('todos');
+}
+
+// Inicializar
+renderLista(COMUNIDADES.map((_,i)=>i));
+</script>
+</body>
+</html>
